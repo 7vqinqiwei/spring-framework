@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.springframework.web.servlet.function;
 
 import java.io.IOException;
@@ -52,7 +51,7 @@ import org.springframework.http.HttpRange;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.GenericHttpMessageConverter;
 import org.springframework.http.converter.HttpMessageConverter;
-import org.springframework.http.server.PathContainer;
+import org.springframework.http.server.RequestPath;
 import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.lang.Nullable;
 import org.springframework.util.CollectionUtils;
@@ -62,10 +61,9 @@ import org.springframework.util.ObjectUtils;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
-import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.util.ServletRequestPathUtils;
 import org.springframework.web.util.UriBuilder;
-import org.springframework.web.util.UrlPathHelper;
 
 /**
  * {@code ServerRequest} implementation based on a {@link HttpServletRequest}.
@@ -77,13 +75,11 @@ class DefaultServerRequest implements ServerRequest {
 
 	private final ServletServerHttpRequest serverHttpRequest;
 
-	private final PathContainer pathContainer;
+	private final RequestPath requestPath;
 
 	private final Headers headers;
 
 	private final List<HttpMessageConverter<?>> messageConverters;
-
-	private final List<MediaType> allSupportedMediaTypes;
 
 	private final MultiValueMap<String, String> params;
 
@@ -96,20 +92,16 @@ class DefaultServerRequest implements ServerRequest {
 	public DefaultServerRequest(HttpServletRequest servletRequest, List<HttpMessageConverter<?>> messageConverters) {
 		this.serverHttpRequest = new ServletServerHttpRequest(servletRequest);
 		this.messageConverters = Collections.unmodifiableList(new ArrayList<>(messageConverters));
-		this.allSupportedMediaTypes = allSupportedMediaTypes(messageConverters);
 
 		this.headers = new DefaultRequestHeaders(this.serverHttpRequest.getHeaders());
 		this.params = CollectionUtils.toMultiValueMap(new ServletParametersMap(servletRequest));
 		this.attributes = new ServletAttributesMap(servletRequest);
 
-		this.pathContainer = PathContainer.parsePath(path());
-	}
+		// DispatcherServlet parses the path but for other scenarios (e.g. tests) we might need to
 
-	private static List<MediaType> allSupportedMediaTypes(List<HttpMessageConverter<?>> messageConverters) {
-		return messageConverters.stream()
-				.flatMap(converter -> converter.getSupportedMediaTypes().stream())
-				.sorted(MediaType.SPECIFICITY_COMPARATOR)
-				.collect(Collectors.toList());
+		this.requestPath = (ServletRequestPathUtils.hasParsedRequestPath(servletRequest) ?
+				ServletRequestPathUtils.getParsedRequestPath(servletRequest) :
+				ServletRequestPathUtils.parseAndCache(servletRequest));
 	}
 
 
@@ -129,17 +121,8 @@ class DefaultServerRequest implements ServerRequest {
 	}
 
 	@Override
-	public String path() {
-		String path = (String) servletRequest().getAttribute(HandlerMapping.LOOKUP_PATH);
-		if (path == null) {
-			path = UrlPathHelper.defaultInstance.getLookupPathForRequest(servletRequest());
-		}
-		return path;
-	}
-
-	@Override
-	public PathContainer pathContainer() {
-		return this.pathContainer;
+	public RequestPath requestPath() {
+		return this.requestPath;
 	}
 
 	@Override
@@ -218,7 +201,14 @@ class DefaultServerRequest implements ServerRequest {
 				return theConverter.read(clazz, this.serverHttpRequest);
 			}
 		}
-		throw new HttpMediaTypeNotSupportedException(contentType, this.allSupportedMediaTypes);
+		throw new HttpMediaTypeNotSupportedException(contentType, getSupportedMediaTypes(bodyClass));
+	}
+
+	private List<MediaType> getSupportedMediaTypes(Class<?> bodyClass) {
+		return this.messageConverters.stream()
+				.flatMap(converter -> converter.getSupportedMediaTypes(bodyClass).stream())
+				.sorted(MediaType.SPECIFICITY_COMPARATOR)
+				.collect(Collectors.toList());
 	}
 
 	@Override
@@ -277,6 +267,10 @@ class DefaultServerRequest implements ServerRequest {
 		return Optional.ofNullable(this.serverHttpRequest.getPrincipal());
 	}
 
+	@Override
+	public String toString() {
+		return String.format("HTTP %s %s", method(), path());
+	}
 
 	static Optional<ServerResponse> checkNotModified(
 			HttpServletRequest servletRequest, @Nullable Instant lastModified, @Nullable String etag) {

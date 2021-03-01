@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2019 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -179,7 +179,7 @@ public class SpringValidatorAdapter implements SmartValidator, javax.validation.
 						}
 					}
 					else {
-						// got no BindingResult - can only do standard rejectValue call
+						// Got no BindingResult - can only do standard rejectValue call
 						// with automatic extraction of the current field value
 						errors.rejectValue(field, errorCode, errorArgs, violation.getMessage());
 					}
@@ -311,7 +311,7 @@ public class SpringValidatorAdapter implements SmartValidator, javax.validation.
 	@Nullable
 	protected Object getRejectedValue(String field, ConstraintViolation<Object> violation, BindingResult bindingResult) {
 		Object invalidValue = violation.getInvalidValue();
-		if (!"".equals(field) && !field.contains("[]") &&
+		if (!field.isEmpty() && !field.contains("[]") &&
 				(invalidValue == violation.getLeafBean() || field.contains("[") || field.contains("."))) {
 			// Possibly a bean constraint with property path: retrieve the actual property value.
 			// However, explicitly avoid this for "address[]" style paths that we can't handle.
@@ -386,7 +386,7 @@ public class SpringValidatorAdapter implements SmartValidator, javax.validation.
 			return (type != null ? this.targetValidator.unwrap(type) : (T) this.targetValidator);
 		}
 		catch (ValidationException ex) {
-			// ignore if just being asked for plain Validator
+			// Ignore if just being asked for plain JSR-303 Validator
 			if (javax.validation.Validator.class == type) {
 				return (T) this.targetValidator;
 			}

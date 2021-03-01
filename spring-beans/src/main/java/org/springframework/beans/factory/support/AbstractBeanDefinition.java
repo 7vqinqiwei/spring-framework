@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -945,16 +945,20 @@ public abstract class AbstractBeanDefinition extends BeanMetadataAttributeAccess
 	}
 
 	/**
-	 * Specify whether or not the configured init method is the default.
-	 * <p>The default value is {@code false}.
+	 * Specify whether or not the configured initializer method is the default.
+	 * <p>The default value is {@code true} for a locally specified init method
+	 * but switched to {@code false} for a shared setting in a defaults section
+	 * (e.g. {@code bean init-method} versus {@code beans default-init-method}
+	 * level in XML) which might not apply to all contained bean definitions.
 	 * @see #setInitMethodName
+	 * @see #applyDefaults
 	 */
 	public void setEnforceInitMethod(boolean enforceInitMethod) {
 		this.enforceInitMethod = enforceInitMethod;
 	}
 
 	/**
-	 * Indicate whether the configured init method is the default.
+	 * Indicate whether the configured initializer method is the default.
 	 * @see #getInitMethodName()
 	 */
 	public boolean isEnforceInitMethod() {
@@ -981,8 +985,12 @@ public abstract class AbstractBeanDefinition extends BeanMetadataAttributeAccess
 
 	/**
 	 * Specify whether or not the configured destroy method is the default.
-	 * <p>The default value is {@code false}.
+	 * <p>The default value is {@code true} for a locally specified destroy method
+	 * but switched to {@code false} for a shared setting in a defaults section
+	 * (e.g. {@code bean destroy-method} versus {@code beans default-destroy-method}
+	 * level in XML) which might not apply to all contained bean definitions.
 	 * @see #setDestroyMethodName
+	 * @see #applyDefaults
 	 */
 	public void setEnforceDestroyMethod(boolean enforceDestroyMethod) {
 		this.enforceDestroyMethod = enforceDestroyMethod;
@@ -990,7 +998,7 @@ public abstract class AbstractBeanDefinition extends BeanMetadataAttributeAccess
 
 	/**
 	 * Indicate whether the configured destroy method is the default.
-	 * @see #getDestroyMethodName
+	 * @see #getDestroyMethodName()
 	 */
 	public boolean isEnforceDestroyMethod() {
 		return this.enforceDestroyMethod;
@@ -1186,8 +1194,8 @@ public abstract class AbstractBeanDefinition extends BeanMetadataAttributeAccess
 				this.primary == that.primary &&
 				this.nonPublicAccessAllowed == that.nonPublicAccessAllowed &&
 				this.lenientConstructorResolution == that.lenientConstructorResolution &&
-				ObjectUtils.nullSafeEquals(this.constructorArgumentValues, that.constructorArgumentValues) &&
-				ObjectUtils.nullSafeEquals(this.propertyValues, that.propertyValues) &&
+				equalsConstructorArgumentValues(that) &&
+				equalsPropertyValues(that) &&
 				ObjectUtils.nullSafeEquals(this.methodOverrides, that.methodOverrides) &&
 				ObjectUtils.nullSafeEquals(this.factoryBeanName, that.factoryBeanName) &&
 				ObjectUtils.nullSafeEquals(this.factoryMethodName, that.factoryMethodName) &&
@@ -1200,12 +1208,30 @@ public abstract class AbstractBeanDefinition extends BeanMetadataAttributeAccess
 				super.equals(other));
 	}
 
+	private boolean equalsConstructorArgumentValues(AbstractBeanDefinition other) {
+		if (!hasConstructorArgumentValues()) {
+			return !other.hasConstructorArgumentValues();
+		}
+		return ObjectUtils.nullSafeEquals(this.constructorArgumentValues, other.constructorArgumentValues);
+	}
+
+	private boolean equalsPropertyValues(AbstractBeanDefinition other) {
+		if (!hasPropertyValues()) {
+			return !other.hasPropertyValues();
+		}
+		return ObjectUtils.nullSafeEquals(this.propertyValues, other.propertyValues);
+	}
+
 	@Override
 	public int hashCode() {
 		int hashCode = ObjectUtils.nullSafeHashCode(getBeanClassName());
 		hashCode = 29 * hashCode + ObjectUtils.nullSafeHashCode(this.scope);
-		hashCode = 29 * hashCode + ObjectUtils.nullSafeHashCode(this.constructorArgumentValues);
-		hashCode = 29 * hashCode + ObjectUtils.nullSafeHashCode(this.propertyValues);
+		if (hasConstructorArgumentValues()) {
+			hashCode = 29 * hashCode + ObjectUtils.nullSafeHashCode(this.constructorArgumentValues);
+		}
+		if (hasPropertyValues()) {
+			hashCode = 29 * hashCode + ObjectUtils.nullSafeHashCode(this.propertyValues);
+		}
 		hashCode = 29 * hashCode + ObjectUtils.nullSafeHashCode(this.factoryBeanName);
 		hashCode = 29 * hashCode + ObjectUtils.nullSafeHashCode(this.factoryMethodName);
 		hashCode = 29 * hashCode + super.hashCode();

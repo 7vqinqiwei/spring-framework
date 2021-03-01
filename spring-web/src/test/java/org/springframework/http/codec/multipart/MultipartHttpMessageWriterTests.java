@@ -26,7 +26,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.UnicastProcessor;
+import reactor.core.publisher.Sinks;
 
 import org.springframework.core.ResolvableType;
 import org.springframework.core.codec.StringDecoder;
@@ -37,6 +37,7 @@ import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.core.testfixture.io.buffer.AbstractLeakCheckingTests;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.ClientCodecConfigurer;
@@ -102,8 +103,12 @@ public class MultipartHttpMessageWriterTests extends AbstractLeakCheckingTests {
 				this.bufferFactory.wrap("Cc".getBytes(StandardCharsets.UTF_8))
 		);
 		FilePart mockPart = mock(FilePart.class);
+		HttpHeaders partHeaders = new HttpHeaders();
+		partHeaders.setContentType(MediaType.TEXT_PLAIN);
+		partHeaders.setContentDispositionFormData("filePublisher", "file.txt");
+		partHeaders.add("foo", "bar");
+		given(mockPart.headers()).willReturn(partHeaders);
 		given(mockPart.content()).willReturn(bufferPublisher);
-		given(mockPart.filename()).willReturn("file.txt");
 
 		MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
 		bodyBuilder.part("name 1", "value 1");
@@ -166,6 +171,7 @@ public class MultipartHttpMessageWriterTests extends AbstractLeakCheckingTests {
 
 		part = requestParts.getFirst("filePublisher");
 		assertThat(part.name()).isEqualTo("filePublisher");
+		assertThat(part.headers()).containsEntry("foo", Collections.singletonList("bar"));
 		assertThat(((FilePart) part).filename()).isEqualTo("file.txt");
 		value = decodeToString(part);
 		assertThat(value).isEqualTo("AaBbCc");
@@ -190,7 +196,7 @@ public class MultipartHttpMessageWriterTests extends AbstractLeakCheckingTests {
 		assertThat(contentType.isCompatibleWith(mediaType)).isTrue();
 		assertThat(contentType.getParameter("type")).isEqualTo("foo");
 		assertThat(contentType.getParameter("boundary")).isNotEmpty();
-		assertThat(contentType.getParameter("charset")).isEqualTo("UTF-8");
+		assertThat(contentType.getParameter("charset")).isNull();
 
 		MultiValueMap<String, Part> requestParts = parse(this.response, hints);
 		assertThat(requestParts.size()).isEqualTo(2);
@@ -207,12 +213,12 @@ public class MultipartHttpMessageWriterTests extends AbstractLeakCheckingTests {
 
 	@Test  // SPR-16402
 	public void singleSubscriberWithResource() throws IOException {
-		UnicastProcessor<Resource> processor = UnicastProcessor.create();
+		Sinks.Many<Resource> sink = Sinks.many().unicast().onBackpressureBuffer();
 		Resource logo = new ClassPathResource("/org/springframework/http/converter/logo.jpg");
-		Mono.just(logo).subscribe(processor);
+		sink.tryEmitNext(logo);
 
 		MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
-		bodyBuilder.asyncPart("logo", processor, Resource.class);
+		bodyBuilder.asyncPart("logo", sink.asFlux(), Resource.class);
 
 		Mono<MultiValueMap<String, HttpEntity<?>>> result = Mono.just(bodyBuilder.build());
 
@@ -232,7 +238,8 @@ public class MultipartHttpMessageWriterTests extends AbstractLeakCheckingTests {
 
 	@Test // SPR-16402
 	public void singleSubscriberWithStrings() {
-		UnicastProcessor<String> processor = UnicastProcessor.create();
+		@SuppressWarnings("deprecation")
+		reactor.core.publisher.UnicastProcessor<String> processor = reactor.core.publisher.UnicastProcessor.create();
 		Flux.just("foo", "bar", "baz").subscribe(processor);
 
 		MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
@@ -250,7 +257,7 @@ public class MultipartHttpMessageWriterTests extends AbstractLeakCheckingTests {
 	@Test  // SPR-16376
 	public void customContentDisposition() throws IOException {
 		Resource logo = new ClassPathResource("/org/springframework/http/converter/logo.jpg");
-		Flux<DataBuffer> buffers = DataBufferUtils.read(logo, new DefaultDataBufferFactory(), 1024);
+		Flux<DataBuffer> buffers = DataBufferUtils.read(logo, DefaultDataBufferFactory.sharedInstance, 1024);
 		long contentLength = logo.contentLength();
 
 		MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();

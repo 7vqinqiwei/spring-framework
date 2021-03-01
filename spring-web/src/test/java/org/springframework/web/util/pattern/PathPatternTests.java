@@ -54,8 +54,8 @@ public class PathPatternTests {
 	public void hasPatternSyntax() {
 		PathPatternParser parser = new PathPatternParser();
 		assertThat(parser.parse("/foo/*").hasPatternSyntax()).isTrue();
-		assertThat(parser.parse("/foo/**").hasPatternSyntax()).isFalse();
-		assertThat(parser.parse("/foo/{*elem}").hasPatternSyntax()).isFalse();
+		assertThat(parser.parse("/foo/**").hasPatternSyntax()).isTrue();
+		assertThat(parser.parse("/foo/{*elem}").hasPatternSyntax()).isTrue();
 		assertThat(parser.parse("/f?o").hasPatternSyntax()).isTrue();
 		assertThat(parser.parse("/f*").hasPatternSyntax()).isTrue();
 		assertThat(parser.parse("/foo/{bar}/baz").hasPatternSyntax()).isTrue();
@@ -557,6 +557,7 @@ public class PathPatternTests {
 		pp = parse("/{this}/{one}/{here}");
 		pri = getPathRemaining(pp, "/foo/bar/goo/boo");
 		assertThat(pri.getPathRemaining().value()).isEqualTo("/boo");
+		assertThat(pri.getPathMatched().value()).isEqualTo("/foo/bar/goo");
 		assertThat(pri.getUriVariables().get("this")).isEqualTo("foo");
 		assertThat(pri.getUriVariables().get("one")).isEqualTo("bar");
 		assertThat(pri.getUriVariables().get("here")).isEqualTo("goo");
@@ -564,11 +565,13 @@ public class PathPatternTests {
 		pp = parse("/aaa/{foo}");
 		pri = getPathRemaining(pp, "/aaa/bbb");
 		assertThat(pri.getPathRemaining().value()).isEqualTo("");
+		assertThat(pri.getPathMatched().value()).isEqualTo("/aaa/bbb");
 		assertThat(pri.getUriVariables().get("foo")).isEqualTo("bbb");
 
 		pp = parse("/aaa/bbb");
 		pri = getPathRemaining(pp, "/aaa/bbb");
 		assertThat(pri.getPathRemaining().value()).isEqualTo("");
+		assertThat(pri.getPathMatched().value()).isEqualTo("/aaa/bbb");
 		assertThat(pri.getUriVariables().size()).isEqualTo(0);
 
 		pp = parse("/*/{foo}/b*");
